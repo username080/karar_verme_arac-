@@ -44,20 +44,16 @@ open_browser() {
 
 start() {
   local rebuild="${1:-}"
-  if [ "$rebuild" = rebuild ] || ! "$CTR" image inspect "$NAME" >/dev/null 2>&1; then
-    echo "İmaj derleniyor..."
+  # Her başlatmada derle: katman önbelleği sayesinde değişmediyse anında biter,
+  # kod güncellendiyse eski imaj yerine yenisi kullanılır.
+  echo "İmaj derleniyor..."
+  if [ "$rebuild" = rebuild ]; then
+    "$CTR" build --no-cache -t "$NAME" .
+  else
     "$CTR" build -t "$NAME" .
   fi
-  if [ "$rebuild" = rebuild ]; then
-    remove
-  elif exists; then
-    if [ "$("$CTR" inspect -f '{{.State.Running}}' "$NAME")" = true ]; then
-      echo "Zaten çalışıyor: $URL"
-      open_browser
-      return 0
-    fi
-    "$CTR" start "$NAME" >/dev/null
-  fi
+  # Konteyner eski imajdan çalışıyor olabilir; veri volume'da olduğu için yeniden oluşturmak güvenli.
+  remove
   if ! exists; then
     "$CTR" run -d --name "$NAME" -p "${PORT}:${PORT}" \
       -v "${VOLUME}:/data" --restart unless-stopped "$NAME" >/dev/null

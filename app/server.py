@@ -43,6 +43,7 @@ class Handler(BaseHTTPRequestHandler):
         self.send_response(code)
         if ctype:
             self.send_header("Content-Type", ctype)
+        self.send_header("Cache-Control", "no-cache")
         self.send_header("Content-Length", str(len(body)))
         self.end_headers()
         if self.command != "HEAD" and code != 204:
