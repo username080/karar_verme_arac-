@@ -1,0 +1,9 @@
+.git
+.collab
+docs
+tests
+README.md
+run.sh
+**/__pycache__
+*.pyc
+*.db
