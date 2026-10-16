@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>MakeUrChoice — Karar Yardımcınız</title>
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+  <div class="app-layout">
+    <aside class="sidebar" aria-label="Kararlar">
+      <div class="sidebar-header">
+        <div class="brand">
+          <span class="brand-dot" aria-hidden="true"></span>
+          <h1>MakeUrChoice</h1>
+        </div>
+        <button id="new-decision-btn" type="button" class="btn btn-primary btn-full">
+          + Yeni karar
+        </button>
+      </div>
+      <div id="decision-list" class="decision-list" role="list" aria-label="Karar listesi"></div>
+    </aside>
+
+    <main class="main-panel" id="main-panel">
+      <div id="empty-state" class="empty-state">
+        <h2>Henüz bir karar seçilmedi</h2>
+        <p>Soldaki listeden bir karar seçin veya <strong>Yeni karar</strong> butonuna tıklayarak yeni bir karar oluşturun.</p>
+      </div>
+
+      <div id="decision-detail" class="decision-detail" hidden>
+        <header class="detail-header">
+          <div class="detail-title-row">
+            <input
+              id="decision-title"
+              type="text"
+              class="title-input"
+              placeholder="Karar başlığı (örn. Hangi laptop?)"
+              aria-label="Karar başlığı"
+              autocomplete="off"
+            >
+            <div class="header-actions">
+              <span id="save-indicator" class="save-indicator" role="status" aria-live="polite"></span>
+              <span id="decision-status-badge" class="badge"></span>
+              <button id="delete-decision-btn" type="button" class="btn btn-danger-outline" title="Kararı sil">
+                Kararı sil
+              </button>
+            </div>
+          </div>
+
+          <div class="detail-notes-row">
+            <label for="decision-notes" class="sr-only">Karar notu</label>
+            <textarea
+              id="decision-notes"
+              class="notes-input"
+              rows="2"
+              placeholder="Karar hakkında genel notlar veya bağlam..."
+            ></textarea>
+          </div>
+
+          <div id="decided-banner" class="decided-banner" hidden>
+            <div class="decided-banner-content">
+              <div class="decided-summary">
+                <span class="decided-icon" aria-hidden="true">✓</span>
+                <div>
+                  <strong id="decided-option-name"></strong> seçildi
+                  <p id="decided-reason-text" class="decided-reason"></p>
+                </div>
+              </div>
+              <button id="reopen-decision-btn" type="button" class="btn btn-secondary">
+                Yeniden aç
+              </button>
+            </div>
+          </div>
+
+          <div id="error-banner" class="error-banner" role="alert" hidden></div>
+        </header>
+
+        <section class="options-section" aria-label="Seçenekler">
+          <div class="options-toolbar">
+            <h2 class="section-heading">Seçenekler</h2>
+            <button id="add-option-btn" type="button" class="btn btn-primary">
+              + Yeni seçenek ekle
+            </button>
+          </div>
+
+          <div id="options-empty" class="options-empty" hidden>
+            <p>Bu kararda henüz seçenek yok. Karşılaştırmaya başlamak için <strong>Yeni seçenek ekle</strong> butonuna tıklayın.</p>
+          </div>
+
+          <div id="options-grid" class="options-grid"></div>
+        </section>
+      </div>
+    </main>
+  </div>
+
+  <div id="decide-modal" class="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="decide-modal-title" hidden>
+    <div class="modal-card">
+      <h3 id="decide-modal-title" class="modal-title">Seçimi Onayla</h3>
+      <p id="decide-modal-desc" class="modal-desc"></p>
+      <label for="decide-reason-input" class="field-label">Karar nedeni (isteğe bağlı)</label>
+      <textarea
+        id="decide-reason-input"
+        class="modal-textarea"
+        rows="3"
+        placeholder="Neden bu seçeneği tercih ettiniz?"
+      ></textarea>
+      <div class="modal-actions">
+        <button id="decide-cancel-btn" type="button" class="btn btn-secondary">İptal</button>
+        <button id="decide-confirm-btn" type="button" class="btn btn-success">Kararı Kaydet</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="/static/app.js"></script>
+</body>
+</html>
