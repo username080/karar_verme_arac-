@@ -6,3 +6,11 @@ __pycache__/
 *.db-shm
 .env
 .venv/
+
+# Ajan/iş birliği çalışma alanı (yerel)
+.collab/
+
+# Gizli/yerel ayarlar
+.env.*
+*.pem
+*.key
