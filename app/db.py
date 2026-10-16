@@ -26,6 +26,7 @@ CREATE TABLE IF NOT EXISTS options (
 );
 """
 
+MAX_REASON = 20000
 OPTION_FIELDS = ("name", "gains", "losses", "risks")
 
 
@@ -117,12 +118,14 @@ def update_decision(did, data):
     if title is not None and not title:
         raise BadRequest("'title' boş olamaz")
     notes = _text(data, "notes")
+    reason = _text(data, "decision_reason")
+    if reason is not None and len(reason) > MAX_REASON:
+        raise BadRequest(f"'decision_reason' en fazla {MAX_REASON} karakter olabilir")
     with closing(connect()) as conn:
         _get_decision_row(conn, did)
-        if title is not None:
-            conn.execute("UPDATE decisions SET title=? WHERE id=?", (title, did))
-        if notes is not None:
-            conn.execute("UPDATE decisions SET notes=? WHERE id=?", (notes, did))
+        for col, v in (("title", title), ("notes", notes), ("decision_reason", reason)):
+            if v is not None:
+                conn.execute(f"UPDATE decisions SET {col}=? WHERE id=?", (v, did))
         conn.commit()
         return _decision(conn, _get_decision_row(conn, did))
 
@@ -173,7 +176,7 @@ def delete_option(oid):
             raise NotFound("seçenek bulunamadı")
         conn.execute(
             "UPDATE decisions SET status='open', chosen_option_id=NULL,"
-            " decision_reason='', decided_at=NULL WHERE chosen_option_id=?", (oid,))
+            " decided_at=NULL WHERE chosen_option_id=?", (oid,))
         conn.execute("DELETE FROM options WHERE id=?", (oid,))
         conn.commit()
 
@@ -182,7 +185,9 @@ def decide(did, data):
     oid = data.get("option_id")
     if not isinstance(oid, int) or isinstance(oid, bool):
         raise BadRequest("'option_id' tam sayı olmalı")
-    reason = _text(data, "reason", default="")
+    reason = _text(data, "reason")
+    if reason is not None and len(reason) > MAX_REASON:
+        raise BadRequest(f"'reason' en fazla {MAX_REASON} karakter olabilir")
     with closing(connect()) as conn:
         _get_decision_row(conn, did)
         if conn.execute("SELECT 1 FROM options WHERE id=? AND decision_id=?",
@@ -190,7 +195,9 @@ def decide(did, data):
             raise BadRequest("seçenek bu karara ait değil")
         conn.execute(
             "UPDATE decisions SET status='decided', chosen_option_id=?,"
-            " decision_reason=?, decided_at=? WHERE id=?", (oid, reason, now(), did))
+            " decided_at=? WHERE id=?", (oid, now(), did))
+        if reason is not None:
+            conn.execute("UPDATE decisions SET decision_reason=? WHERE id=?", (reason, did))
         conn.commit()
         return _decision(conn, _get_decision_row(conn, did))
 
@@ -200,6 +207,30 @@ def reopen(did):
         _get_decision_row(conn, did)
         conn.execute(
             "UPDATE decisions SET status='open', chosen_option_id=NULL,"
-            " decision_reason='', decided_at=NULL WHERE id=?", (did,))
+            " decided_at=NULL WHERE id=?", (did,))
+        conn.commit()
+        return _decision(conn, _get_decision_row(conn, did))
+
+
+def import_board(board):
+    """Doğrulanmış board'dan tek transaction'da yeni karar oluşturur."""
+    with closing(connect()) as conn:
+        ts = now()
+        cur = conn.execute(
+            "INSERT INTO decisions (title, notes, decision_reason, created_at)"
+            " VALUES (?,?,?,?)", (board["title"], board["notes"], board["decision_reason"], ts))
+        did = cur.lastrowid
+        chosen_id = None
+        for pos, o in enumerate(board["options"]):
+            c = conn.execute(
+                "INSERT INTO options (decision_id, name, gains, losses, risks, position)"
+                " VALUES (?,?,?,?,?,?)",
+                (did, o["name"], o["gains"], o["losses"], o["risks"], pos))
+            if chosen_id is None and o["name"] == (board["chosen_option"] or "").strip():
+                chosen_id = c.lastrowid
+        if board["status"] == "decided" and chosen_id is not None:
+            conn.execute(
+                "UPDATE decisions SET status='decided', chosen_option_id=?, decided_at=?"
+                " WHERE id=?", (chosen_id, ts, did))
         conn.commit()
         return _decision(conn, _get_decision_row(conn, did))

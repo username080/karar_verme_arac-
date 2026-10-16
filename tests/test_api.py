@@ -107,7 +107,7 @@ class ApiTest(unittest.TestCase):
         re_ = self.j("POST", f"/api/decisions/{did}/reopen")
         self.assertEqual((re_["status"], re_["chosen_option_id"], re_["decided_at"]),
                          ("open", None, None))
-        self.assertEqual(re_["decision_reason"], "")
+        self.assertEqual(re_["decision_reason"], "iyi")
         self.j("POST", "/api/decisions/99999/reopen", expect=404)
 
     def test_foreign_option_decide(self):
@@ -123,12 +123,103 @@ class ApiTest(unittest.TestCase):
         self.j("DELETE", f"/api/options/{o['id']}", expect=204)
         got = self.j("GET", f"/api/decisions/{d['id']}")
         self.assertEqual((got["status"], got["chosen_option_id"], got["options"]), ("open", None, []))
+        self.assertEqual(got["decision_reason"], "r")
 
     def test_delete_decision_cascades_options(self):
         d = self.new_decision()
         o = self.j("POST", f"/api/decisions/{d['id']}/options", {"name": "x"}, 201)
         self.j("DELETE", f"/api/decisions/{d['id']}", expect=204)
         self.j("PUT", f"/api/options/{o['id']}", {"name": "y"}, 404)
+
+    def test_decision_reason_put_and_decide_keeps(self):
+        d = self.new_decision()
+        up = self.j("PUT", f"/api/decisions/{d['id']}", {"decision_reason": "taslak ğüş"})
+        self.assertEqual((up["decision_reason"], up["title"]), ("taslak ğüş", d["title"]))
+        self.j("PUT", f"/api/decisions/{d['id']}", {"decision_reason": "x" * 20001}, 400)
+        self.j("PUT", f"/api/decisions/{d['id']}", {"decision_reason": 3}, 400)
+        self.j("PUT", f"/api/decisions/{d['id']}", {"decision_reason": "x" * 20000})
+        self.j("PUT", f"/api/decisions/{d['id']}", {"decision_reason": "taslak"})
+        o = self.j("POST", f"/api/decisions/{d['id']}/options", {"name": "x"}, 201)
+        dec = self.j("POST", f"/api/decisions/{d['id']}/decide", {"option_id": o["id"]})
+        self.assertEqual(dec["decision_reason"], "taslak")
+        dec = self.j("POST", f"/api/decisions/{d['id']}/decide", {"option_id": o["id"], "reason": ""})
+        self.assertEqual(dec["decision_reason"], "")
+
+    BOARD = {"format": "makeurchoice.board", "version": 1, "title": " Hangi laptop? ",
+             "notes": "n", "status": "decided", "chosen_option": "B",
+             "decision_reason": "çünkü ğ",
+             "options": [{"name": "A", "gains": "g"}, {"name": "B", "gains": "ş", "losses": "l", "risks": "r"}]}
+
+    def imp(self, body, expect=201):
+        return self.j("POST", "/api/import", body, expect)
+
+    def test_import_raw(self):
+        d = self.imp(self.BOARD)
+        self.assertEqual((d["title"], d["status"], d["decision_reason"]),
+                         ("Hangi laptop?", "decided", "çünkü ğ"))
+        self.assertEqual([o["name"] for o in d["options"]], ["A", "B"])
+        self.assertEqual(d["chosen_option_id"], d["options"][1]["id"])
+        self.assertEqual(d["options"][1]["gains"], "ş")
+        self.assertEqual(d["options"][0]["losses"], "")
+        self.assertTrue(d["decided_at"])
+        d2 = self.imp(self.BOARD)
+        self.assertNotEqual(d["id"], d2["id"])
+        self.assertNotEqual(d["options"][0]["id"], d2["options"][0]["id"])
+
+    def test_import_text_variants(self):
+        b = json.dumps(self.BOARD, ensure_ascii=False)
+        d = self.imp({"text": f"Merhaba!\n```json\n{b}\n```\nİyi şanslar"})
+        self.assertEqual(d["status"], "decided")
+        chatter = 'Öneri: {küçük} değişiklik. Pano:\n' + json.dumps(
+            {"title": "T", "options": [{"name": "s}ol", "gains": "{x}"}]}) + "\nBitti { yarım"
+        d = self.imp({"text": chatter})
+        self.assertEqual((d["title"], d["status"], d["options"][0]["name"]), ("T", "open", "s}ol"))
+        two = ("```json\n" + json.dumps({"title": "ilk", "options": []}) + "\n```\n"
+               "değiştirdim:\n```json\n" + json.dumps({"title": "son", "options": []}) + "\n```")
+        self.assertEqual(self.imp({"text": two})["title"], "son")
+        mixed = ("```json\n" + json.dumps({"title": "iyi", "options": []}) + "\n```\n"
+                 "```json\n{bozuk\n```")
+        self.assertEqual(self.imp({"text": mixed})["title"], "iyi")
+        self.assertEqual(self.imp({"text": "```\n" + b + "\n```"})["title"], "Hangi laptop?")
+
+    def test_import_chosen_mismatch_and_open(self):
+        bd = dict(self.BOARD, chosen_option="yok")
+        d = self.imp(bd)
+        self.assertEqual((d["status"], d["chosen_option_id"], d["decided_at"]), ("open", None, None))
+        d = self.imp(dict(self.BOARD, status="open"))
+        self.assertEqual((d["status"], d["chosen_option_id"]), ("open", None))
+        d = self.imp({"title": "min", "options": []})
+        self.assertEqual((d["notes"], d["status"], d["options"]), ("", "open", []))
+        d = self.imp(dict(self.BOARD, bilinmeyen=1))
+        self.assertEqual(d["status"], "decided")
+
+    def test_import_errors(self):
+        n = len(self.j("GET", "/api/decisions"))
+        bad = [
+            {"text": "sadece sohbet"}, {"text": ""}, {"text": "```json\n{bozuk\n```"},
+            {"text": '{"title": "", "options": []}'}, {"text": "{\"a\": 1}"},
+            {"title": "  ", "options": []}, {"title": "x"}, {"title": "x", "options": {}},
+            dict(self.BOARD, version=2), dict(self.BOARD, format="baska"),
+            {"title": "x", "options": [{"name": ""}]}, {"title": "x", "options": [1]},
+            {"title": "x", "options": [{"name": "a", "gains": 5}]},
+            {"title": "x", "options": [{"name": "a"}] * 101},
+            {"title": "t" * 20001, "options": []},
+            {"title": "x", "notes": "n" * 20001, "options": []},
+            {"title": "x", "decision_reason": "n" * 20001, "options": []},
+            {"title": "x", "options": [{"name": "a", "risks": "r" * 20001}]},
+            dict(self.BOARD, status="x"), dict(self.BOARD, chosen_option=3), {"text": 5},
+            {"text": "```json\n" + json.dumps(dict(self.BOARD, version=2)) + "\n```"},
+        ]
+        for body in bad:
+            st, raw, _ = self.req("POST", "/api/import", body)
+            self.assertEqual(st, 400, body)
+            self.assertTrue(json.loads(raw)["error"])
+        self.assertEqual(self.req("POST", "/api/import", raw=b"[1]")[0], 400)
+        self.assertEqual(self.req("POST", "/api/import", raw=b"{x")[0], 400)
+        self.assertEqual(self.req("POST", "/api/import", raw=b" " * (1024 * 1024 + 1))[0], 400)
+        self.assertEqual(self.req("GET", "/api/import")[0], 405)
+        self.assertEqual(len(self.j("GET", "/api/decisions")), n)
+        self.imp({"title": "x", "options": [{"name": "a"}] * 100})
 
     def test_static_and_traversal(self):
         static = os.path.join(ROOT, "app", "static")

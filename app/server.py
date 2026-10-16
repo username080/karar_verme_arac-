@@ -8,6 +8,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import unquote, urlsplit
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import boardio  # noqa: E402
 import db  # noqa: E402
 
 STATIC_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "static")
@@ -26,6 +27,7 @@ ROUTES = [
     ("PUT", r"/api/options/(\d+)", lambda m, b: (200, db.update_option(int(m[1]), b))),
     ("DELETE", r"/api/options/(\d+)", lambda m, b: (204, db.delete_option(int(m[1])))),
     ("POST", r"/api/decisions/(\d+)/decide", lambda m, b: (200, db.decide(int(m[1]), b))),
+    ("POST", r"/api/import", lambda m, b: (201, db.import_board(boardio.parse_import(b)))),
     ("POST", r"/api/decisions/(\d+)/reopen", lambda m, b: (200, db.reopen(int(m[1])))),
 ]
 
@@ -86,7 +88,7 @@ class Handler(BaseHTTPRequestHandler):
             if path.startswith("/static/"):
                 return self._static(unquote(path[len("/static/"):]))
             self._error(404, "bulunamadı")
-        except db.BadRequest as e:
+        except (db.BadRequest, boardio.BoardError) as e:
             self._error(400, str(e))
         except db.NotFound as e:
             self._error(404, str(e))
