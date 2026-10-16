@@ -9,18 +9,22 @@
     decideTargetOptionId: null,
     decisionTimers: new Map(),
     optionTimers: new Map(),
-    saveIndicatorTimeout: null
+    saveIndicatorTimeout: null,
+    copyBtnTimeout: null
   };
 
   // DOM Elements
   const decisionListEl = document.getElementById("decision-list");
   const newDecisionBtn = document.getElementById("new-decision-btn");
+  const importBoardBtn = document.getElementById("import-board-btn");
   const emptyStateEl = document.getElementById("empty-state");
   const decisionDetailEl = document.getElementById("decision-detail");
   const decisionTitleInput = document.getElementById("decision-title");
   const decisionNotesInput = document.getElementById("decision-notes");
+  const decisionReasonInput = document.getElementById("decision-reason");
   const decisionStatusBadge = document.getElementById("decision-status-badge");
   const saveIndicatorEl = document.getElementById("save-indicator");
+  const copyBoardBtn = document.getElementById("copy-board-btn");
   const deleteDecisionBtn = document.getElementById("delete-decision-btn");
   const decidedBannerEl = document.getElementById("decided-banner");
   const decidedOptionNameEl = document.getElementById("decided-option-name");
@@ -31,12 +35,24 @@
   const optionsEmptyEl = document.getElementById("options-empty");
   const optionsGridEl = document.getElementById("options-grid");
 
-  // Modal Elements
+  // Decide Modal Elements
   const decideModalEl = document.getElementById("decide-modal");
   const decideModalDescEl = document.getElementById("decide-modal-desc");
   const decideReasonInput = document.getElementById("decide-reason-input");
   const decideCancelBtn = document.getElementById("decide-cancel-btn");
   const decideConfirmBtn = document.getElementById("decide-confirm-btn");
+
+  // Import Modal Elements
+  const importModalEl = document.getElementById("import-modal");
+  const importTextInput = document.getElementById("import-text-input");
+  const importErrorMsgEl = document.getElementById("import-error-msg");
+  const importCancelBtn = document.getElementById("import-cancel-btn");
+  const importConfirmBtn = document.getElementById("import-confirm-btn");
+
+  // Copy Fallback Modal Elements
+  const copyFallbackModalEl = document.getElementById("copy-fallback-modal");
+  const copyFallbackTextarea = document.getElementById("copy-fallback-textarea");
+  const copyFallbackCloseBtn = document.getElementById("copy-fallback-close-btn");
 
   // Helpers
   function getSelectedDecision() {
@@ -227,6 +243,17 @@
     });
   }
 
+  function renderDecidedBannerReason(reasonValue) {
+    const trimmed = (reasonValue || "").trim();
+    if (trimmed) {
+      decidedReasonTextEl.textContent = `Neden: ${trimmed}`;
+      decidedReasonTextEl.hidden = false;
+    } else {
+      decidedReasonTextEl.textContent = "Neden belirtilmedi.";
+      decidedReasonTextEl.hidden = false;
+    }
+  }
+
   // Update only header badges and decided banner without destroying option card inputs
   function renderDecisionHeaderState(decision) {
     const isDecided = decision.status === "decided";
@@ -241,13 +268,7 @@
       decidedOptionNameEl.textContent = chosenOption
         ? chosenOption.name
         : "Bir seçenek";
-      if (decision.decision_reason && decision.decision_reason.trim()) {
-        decidedReasonTextEl.textContent = `Neden: ${decision.decision_reason}`;
-        decidedReasonTextEl.hidden = false;
-      } else {
-        decidedReasonTextEl.textContent = "Neden belirtilmedi.";
-        decidedReasonTextEl.hidden = false;
-      }
+      renderDecidedBannerReason(decision.decision_reason);
       decidedBannerEl.hidden = false;
     } else {
       decidedBannerEl.hidden = true;
@@ -433,16 +454,29 @@
 
     decisionTitleInput.value = decision.title;
     decisionNotesInput.value = decision.notes;
+    decisionReasonInput.value = decision.decision_reason || "";
 
     renderDecisionHeaderState(decision);
     renderOptionsGrid(decision);
   }
 
-  // Auto-save logic for Decision (title + notes)
+  // Auto-save logic for Decision (title + notes + decision_reason)
+  function getDecisionDraftFromDOM() {
+    return {
+      title: decisionTitleInput.value,
+      notes: decisionNotesInput.value,
+      decision_reason: decisionReasonInput.value
+    };
+  }
+
   function hasDecisionChanged(decision, draft) {
     const trimmedTitle = draft.title.trim();
     if (!trimmedTitle) return false;
-    return trimmedTitle !== decision.title || draft.notes !== decision.notes;
+    return (
+      trimmedTitle !== decision.title ||
+      draft.notes !== decision.notes ||
+      draft.decision_reason !== (decision.decision_reason || "")
+    );
   }
 
   function scheduleDecisionSave(decisionId) {
@@ -453,10 +487,7 @@
     const timerId = setTimeout(() => {
       state.decisionTimers.delete(decisionId);
       if (state.selectedDecisionId === decisionId) {
-        flushDecisionSave(decisionId, {
-          title: decisionTitleInput.value,
-          notes: decisionNotesInput.value
-        });
+        flushDecisionSave(decisionId, getDecisionDraftFromDOM());
       }
     }, DEBOUNCE_MS);
     state.decisionTimers.set(decisionId, timerId);
@@ -495,10 +526,14 @@
         method: "PUT",
         body: {
           title: trimmedTitle,
-          notes: draft.notes
+          notes: draft.notes,
+          decision_reason: draft.decision_reason
         }
       });
-      replaceDecisionInState(updated);
+      const normalized = replaceDecisionInState(updated);
+      if (normalized && state.selectedDecisionId === decisionId) {
+        renderDecisionHeaderState(normalized);
+      }
       renderDecisionList();
       setSaveStatus("saved");
     } catch (err) {
@@ -514,6 +549,21 @@
       if (found) return { decision, option: found };
     }
     return null;
+  }
+
+  function getOptionDraftFromCard(optionId) {
+    const cardEl = optionsGridEl.querySelector(`[data-option-id="${optionId}"]`);
+    if (!cardEl) return null;
+    const nameEl = cardEl.querySelector(".option-name-input");
+    const gainsEl = document.getElementById(`opt-${optionId}-gains`);
+    const lossesEl = document.getElementById(`opt-${optionId}-losses`);
+    const risksEl = document.getElementById(`opt-${optionId}-risks`);
+    return {
+      name: nameEl ? nameEl.value : "",
+      gains: gainsEl ? gainsEl.value : "",
+      losses: lossesEl ? lossesEl.value : "",
+      risks: risksEl ? risksEl.value : ""
+    };
   }
 
   function hasOptionChanged(option, draft) {
@@ -546,7 +596,7 @@
     }
 
     const match = findOptionById(optionId);
-    if (!match) return;
+    if (!match || !draft) return;
     const { decision, option } = match;
 
     const trimmedName = draft.name.trim();
@@ -597,16 +647,206 @@
     }
   }
 
+  // Flush all pending decision & option saves (used before Copy Board or switching decision)
+  async function flushAllPendingSaves() {
+    const decision = getSelectedDecision();
+    if (!decision) return;
+
+    const tasks = [];
+
+    if (
+      state.decisionTimers.has(decision.id) ||
+      hasDecisionChanged(decision, getDecisionDraftFromDOM())
+    ) {
+      tasks.push(flushDecisionSave(decision.id, getDecisionDraftFromDOM()));
+    }
+
+    for (const opt of decision.options || []) {
+      const draft = getOptionDraftFromCard(opt.id);
+      if (
+        draft &&
+        (state.optionTimers.has(opt.id) || hasOptionChanged(opt, draft))
+      ) {
+        tasks.push(flushOptionSave(opt.id, draft));
+      }
+    }
+
+    if (tasks.length > 0) {
+      await Promise.all(tasks);
+    }
+  }
+
+  // Board Copy Text Builder (CONTRACT.md Ek v2)
+  function buildBoardCopyText(decision) {
+    const titleDraft = decisionTitleInput.value.trim() || decision.title || "Adsız Karar";
+    const notesDraft = decisionNotesInput.value;
+    const reasonDraft = decisionReasonInput.value;
+
+    const currentOptions = (decision.options || []).map((opt) => {
+      const cardDraft = getOptionDraftFromCard(opt.id);
+      return {
+        id: opt.id,
+        name: cardDraft && cardDraft.name.trim() ? cardDraft.name.trim() : opt.name,
+        gains: cardDraft ? cardDraft.gains : (opt.gains || ""),
+        losses: cardDraft ? cardDraft.losses : (opt.losses || ""),
+        risks: cardDraft ? cardDraft.risks : (opt.risks || "")
+      };
+    });
+
+    const chosenOpt =
+      decision.status === "decided" && decision.chosen_option_id != null
+        ? currentOptions.find((o) => o.id === decision.chosen_option_id) || null
+        : null;
+
+    const isDecided = decision.status === "decided" && chosenOpt !== null;
+    const statusText = isDecided ? `Verilmiş: ${chosenOpt.name}` : "Açık";
+
+    const boardJson = {
+      format: "makeurchoice.board",
+      version: 1,
+      title: titleDraft,
+      notes: notesDraft,
+      status: isDecided ? "decided" : "open",
+      chosen_option: isDecided ? chosenOpt.name : null,
+      decision_reason: reasonDraft,
+      options: currentOptions.map((o) => ({
+        name: o.name,
+        gains: o.gains,
+        losses: o.losses,
+        risks: o.risks
+      }))
+    };
+
+    const lines = [
+      "Aşağıda bir karar panosu var (seçenekler: kazanç / kayıp / risk). Bunu benimle tartış; önerilerin varsa değiştirilmiş panoyu aynı JSON biçiminde, tek bir ```json bloğu olarak ver.",
+      "",
+      `## ${titleDraft}`,
+      `Notlar: ${notesDraft}`,
+      `Durum: ${statusText}`,
+      `Neden: ${reasonDraft}`,
+      ""
+    ];
+
+    currentOptions.forEach((opt, idx) => {
+      lines.push(`### Seçenek ${idx + 1}: ${opt.name}`);
+      lines.push(`- Kazanacaklarım: ${opt.gains}`);
+      lines.push(`- Kaybedeceklerim: ${opt.losses}`);
+      lines.push(`- Riskler: ${opt.risks}`);
+      lines.push("");
+    });
+
+    lines.push("```json");
+    lines.push(JSON.stringify(boardJson, null, 2));
+    lines.push("```");
+
+    return lines.join("\n");
+  }
+
+  async function handleCopyBoard() {
+    const decision = getSelectedDecision();
+    if (!decision) return;
+
+    copyBoardBtn.disabled = true;
+    showError("");
+
+    try {
+      await flushAllPendingSaves();
+      const refreshedDecision = getSelectedDecision() || decision;
+      const text = buildBoardCopyText(refreshedDecision);
+
+      let copiedToClipboard = false;
+      if (navigator.clipboard && typeof navigator.clipboard.writeText === "function") {
+        try {
+          await navigator.clipboard.writeText(text);
+          copiedToClipboard = true;
+        } catch (_clipErr) {
+          copiedToClipboard = false;
+        }
+      }
+
+      if (copiedToClipboard) {
+        setSaveStatus("saved", "Kopyalandı");
+        if (state.copyBtnTimeout) {
+          clearTimeout(state.copyBtnTimeout);
+        }
+        copyBoardBtn.textContent = "✓ Kopyalandı";
+        state.copyBtnTimeout = setTimeout(() => {
+          copyBoardBtn.textContent = "Panoyu kopyala";
+          state.copyBtnTimeout = null;
+        }, 2000);
+      } else {
+        openCopyFallbackModal(text);
+      }
+    } catch (err) {
+      showError(err.message || "Pano kopyalanırken hata oluştu.");
+    } finally {
+      copyBoardBtn.disabled = false;
+    }
+  }
+
+  function openCopyFallbackModal(text) {
+    copyFallbackTextarea.value = text;
+    copyFallbackModalEl.hidden = false;
+    copyFallbackTextarea.focus();
+    copyFallbackTextarea.select();
+  }
+
+  function closeCopyFallbackModal() {
+    copyFallbackModalEl.hidden = true;
+    copyFallbackTextarea.value = "";
+  }
+
+  // Import Board Modal & Action
+  function openImportModal() {
+    importTextInput.value = "";
+    importErrorMsgEl.hidden = true;
+    importErrorMsgEl.textContent = "";
+    importModalEl.hidden = false;
+    importTextInput.focus();
+  }
+
+  function closeImportModal() {
+    importModalEl.hidden = true;
+    importTextInput.value = "";
+    importErrorMsgEl.hidden = true;
+    importErrorMsgEl.textContent = "";
+  }
+
+  async function handleConfirmImport() {
+    const rawText = importTextInput.value;
+    if (!rawText || !rawText.trim()) {
+      importErrorMsgEl.textContent = "Lütfen içe aktarılacak pano metnini veya JSON'u yapıştırın.";
+      importErrorMsgEl.hidden = false;
+      return;
+    }
+
+    importConfirmBtn.disabled = true;
+    importErrorMsgEl.hidden = true;
+    importErrorMsgEl.textContent = "";
+
+    try {
+      const imported = await apiRequest("/api/import", {
+        method: "POST",
+        body: {
+          text: rawText
+        }
+      });
+
+      closeImportModal();
+      await loadDecisions(imported && imported.id ? imported.id : null);
+      setSaveStatus("saved", "İçe aktarıldı");
+    } catch (err) {
+      importErrorMsgEl.textContent = err.message || "Pano içe aktarılamadı.";
+      importErrorMsgEl.hidden = false;
+    } finally {
+      importConfirmBtn.disabled = false;
+    }
+  }
+
   // Actions
   async function selectDecision(decisionId) {
     if (state.selectedDecisionId != null) {
-      const prevId = state.selectedDecisionId;
-      if (state.decisionTimers.has(prevId)) {
-        await flushDecisionSave(prevId, {
-          title: decisionTitleInput.value,
-          notes: decisionNotesInput.value
-        });
-      }
+      await flushAllPendingSaves();
     }
 
     state.selectedDecisionId = decisionId;
@@ -743,7 +983,6 @@
       if (wasChosen) {
         decision.status = "open";
         decision.chosen_option_id = null;
-        decision.decision_reason = "";
         decision.decided_at = null;
       }
 
@@ -772,8 +1011,7 @@
 
     state.decideTargetOptionId = optionId;
     decideModalDescEl.textContent = `"${option.name}" seçeneğini bu karar için seçmek üzeresiniz.`;
-    decideReasonInput.value =
-      decision.chosen_option_id === optionId ? decision.decision_reason : "";
+    decideReasonInput.value = decisionReasonInput.value;
     decideModalEl.hidden = false;
     decideReasonInput.focus();
   }
@@ -789,34 +1027,19 @@
     const optionId = state.decideTargetOptionId;
     if (!decision || optionId == null) return;
 
-    // If the option card had unsaved changes, flush them first
-    if (state.optionTimers.has(optionId)) {
-      const cardEl = optionsGridEl.querySelector(
-        `[data-option-id="${optionId}"]`
-      );
-      if (cardEl) {
-        const nameEl = cardEl.querySelector(".option-name-input");
-        const gainsEl = document.getElementById(`opt-${optionId}-gains`);
-        const lossesEl = document.getElementById(`opt-${optionId}-losses`);
-        const risksEl = document.getElementById(`opt-${optionId}-risks`);
-        await flushOptionSave(optionId, {
-          name: nameEl ? nameEl.value : "",
-          gains: gainsEl ? gainsEl.value : "",
-          losses: lossesEl ? lossesEl.value : "",
-          risks: risksEl ? risksEl.value : ""
-        });
-      }
-    }
-
     decideConfirmBtn.disabled = true;
     showError("");
 
     try {
+      // Sync modal reason into main reason textarea before flushing/deciding
+      decisionReasonInput.value = decideReasonInput.value;
+      await flushAllPendingSaves();
+
       const updated = await apiRequest(`/api/decisions/${decision.id}/decide`, {
         method: "POST",
         body: {
           option_id: optionId,
-          reason: decideReasonInput.value.trim()
+          reason: decideReasonInput.value
         }
       });
 
@@ -840,6 +1063,7 @@
     showError("");
 
     try {
+      await flushAllPendingSaves();
       const updated = await apiRequest(`/api/decisions/${decision.id}/reopen`, {
         method: "POST"
       });
@@ -854,13 +1078,22 @@
     }
   }
 
-  // Initial Load
-  async function loadDecisions() {
+  // Load Decisions
+  async function loadDecisions(preferredId = null) {
     showError("");
     try {
       const list = await apiRequest("/api/decisions");
       state.decisions = Array.isArray(list) ? list.map(normalizeDecision) : [];
-      if (state.decisions.length > 0 && state.selectedDecisionId == null) {
+      if (
+        preferredId != null &&
+        state.decisions.some((d) => d.id === preferredId)
+      ) {
+        state.selectedDecisionId = preferredId;
+      } else if (
+        state.decisions.length > 0 &&
+        (state.selectedDecisionId == null ||
+          !state.decisions.some((d) => d.id === state.selectedDecisionId))
+      ) {
         state.selectedDecisionId = state.decisions[0].id;
       }
       renderDecisionList();
@@ -874,6 +1107,8 @@
 
   // Event Listeners
   newDecisionBtn.addEventListener("click", handleCreateDecision);
+  importBoardBtn.addEventListener("click", openImportModal);
+  copyBoardBtn.addEventListener("click", handleCopyBoard);
   deleteDecisionBtn.addEventListener("click", handleDeleteDecision);
   addOptionBtn.addEventListener("click", handleAddOption);
   reopenDecisionBtn.addEventListener("click", handleReopenDecision);
@@ -890,10 +1125,7 @@
     if (!decisionTitleInput.value.trim()) {
       decisionTitleInput.value = decision.title || "Yeni Karar";
     }
-    flushDecisionSave(decision.id, {
-      title: decisionTitleInput.value,
-      notes: decisionNotesInput.value
-    });
+    flushDecisionSave(decision.id, getDecisionDraftFromDOM());
   });
 
   decisionNotesInput.addEventListener("input", () => {
@@ -905,10 +1137,22 @@
   decisionNotesInput.addEventListener("blur", () => {
     const decision = getSelectedDecision();
     if (!decision) return;
-    flushDecisionSave(decision.id, {
-      title: decisionTitleInput.value,
-      notes: decisionNotesInput.value
-    });
+    flushDecisionSave(decision.id, getDecisionDraftFromDOM());
+  });
+
+  decisionReasonInput.addEventListener("input", () => {
+    const decision = getSelectedDecision();
+    if (!decision) return;
+    if (decision.status === "decided") {
+      renderDecidedBannerReason(decisionReasonInput.value);
+    }
+    scheduleDecisionSave(decision.id);
+  });
+
+  decisionReasonInput.addEventListener("blur", () => {
+    const decision = getSelectedDecision();
+    if (!decision) return;
+    flushDecisionSave(decision.id, getDecisionDraftFromDOM());
   });
 
   decideCancelBtn.addEventListener("click", closeDecideModal);
@@ -920,9 +1164,28 @@
     }
   });
 
+  importCancelBtn.addEventListener("click", closeImportModal);
+  importConfirmBtn.addEventListener("click", handleConfirmImport);
+
+  importModalEl.addEventListener("click", (e) => {
+    if (e.target === importModalEl) {
+      closeImportModal();
+    }
+  });
+
+  copyFallbackCloseBtn.addEventListener("click", closeCopyFallbackModal);
+
+  copyFallbackModalEl.addEventListener("click", (e) => {
+    if (e.target === copyFallbackModalEl) {
+      closeCopyFallbackModal();
+    }
+  });
+
   document.addEventListener("keydown", (e) => {
-    if (e.key === "Escape" && !decideModalEl.hidden) {
-      closeDecideModal();
+    if (e.key === "Escape") {
+      if (!decideModalEl.hidden) closeDecideModal();
+      if (!importModalEl.hidden) closeImportModal();
+      if (!copyFallbackModalEl.hidden) closeCopyFallbackModal();
     }
   });
 

@@ -34,6 +34,7 @@
   --radius-md: 10px;
   --radius-lg: 14px;
   --font-sans: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Ubuntu, "Helvetica Neue", Arial, sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -129,6 +130,12 @@ body {
   display: flex;
   flex-direction: column;
   gap: 0.9rem;
+}
+
+.sidebar-actions {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 0.5rem;
 }
 
 .brand {
@@ -333,7 +340,7 @@ body {
 
 .empty-state {
   margin: auto;
-  max-width: 420px;
+  max-width: 440px;
   text-align: center;
   padding: 2.5rem 1.5rem;
   background-color: var(--bg-surface);
@@ -668,6 +675,48 @@ body {
   gap: 0.5rem;
 }
 
+/* Always-visible Decision Reason Section (v2) */
+.reason-section {
+  background-color: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-lg);
+  padding: 1.2rem 1.4rem;
+  box-shadow: var(--shadow-sm);
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+}
+
+.reason-label {
+  display: block;
+}
+
+.reason-hint {
+  margin: 0;
+  font-size: 0.84rem;
+  color: var(--text-muted);
+}
+
+.reason-textarea {
+  width: 100%;
+  font: inherit;
+  font-size: 0.94rem;
+  color: var(--text-main);
+  background-color: var(--bg-muted);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  padding: 0.65rem 0.8rem;
+  resize: vertical;
+  min-height: 92px;
+  transition: border-color 0.15s ease, background-color 0.15s ease;
+}
+
+.reason-textarea:focus {
+  outline: none;
+  border-color: var(--primary);
+  background-color: var(--bg-surface);
+}
+
 /* Modal */
 .modal-backdrop {
   position: fixed;
@@ -691,6 +740,10 @@ body {
   display: flex;
   flex-direction: column;
   gap: 0.85rem;
+}
+
+.modal-card-lg {
+  max-width: 620px;
 }
 
 .modal-title {
@@ -720,6 +773,12 @@ body {
   border-radius: var(--radius-sm);
   padding: 0.6rem 0.75rem;
   resize: vertical;
+}
+
+.modal-textarea-lg {
+  font-family: var(--font-mono);
+  font-size: 0.86rem;
+  min-height: 220px;
 }
 
 .modal-textarea:focus {

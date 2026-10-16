@@ -14,9 +14,14 @@
           <span class="brand-dot" aria-hidden="true"></span>
           <h1>MakeUrChoice</h1>
         </div>
-        <button id="new-decision-btn" type="button" class="btn btn-primary btn-full">
-          + Yeni karar
-        </button>
+        <div class="sidebar-actions">
+          <button id="new-decision-btn" type="button" class="btn btn-primary">
+            + Yeni karar
+          </button>
+          <button id="import-board-btn" type="button" class="btn btn-secondary">
+            İçe aktar
+          </button>
+        </div>
       </div>
       <div id="decision-list" class="decision-list" role="list" aria-label="Karar listesi"></div>
     </aside>
@@ -24,7 +29,7 @@
     <main class="main-panel" id="main-panel">
       <div id="empty-state" class="empty-state">
         <h2>Henüz bir karar seçilmedi</h2>
-        <p>Soldaki listeden bir karar seçin veya <strong>Yeni karar</strong> butonuna tıklayarak yeni bir karar oluşturun.</p>
+        <p>Soldaki listeden bir karar seçin, <strong>Yeni karar</strong> oluşturun veya <strong>İçe aktar</strong> ile bir pano yapıştırın.</p>
       </div>
 
       <div id="decision-detail" class="decision-detail" hidden>
@@ -41,6 +46,9 @@
             <div class="header-actions">
               <span id="save-indicator" class="save-indicator" role="status" aria-live="polite"></span>
               <span id="decision-status-badge" class="badge"></span>
+              <button id="copy-board-btn" type="button" class="btn btn-secondary" title="Panoyu LLM veya paylaşım için kopyala">
+                Panoyu kopyala
+              </button>
               <button id="delete-decision-btn" type="button" class="btn btn-danger-outline" title="Kararı sil">
                 Kararı sil
               </button>
@@ -89,15 +97,31 @@
 
           <div id="options-grid" class="options-grid"></div>
         </section>
+
+        <section class="reason-section" aria-label="Neden bunu seçtim ve sonuç notu">
+          <label for="decision-reason" class="section-heading reason-label">
+            Neden bunu seçtim? / Sonuç notu
+          </label>
+          <p class="reason-hint">
+            Karar açıkken taslak gerekçenizi yazabilir, karar verdikten sonra da düzenleyebilirsiniz.
+          </p>
+          <textarea
+            id="decision-reason"
+            class="reason-textarea"
+            rows="4"
+            placeholder="Karar gerekçeniz, değerlendirme sonucunuz veya neden bu seçeneğe yöneldiğiniz..."
+          ></textarea>
+        </section>
       </div>
     </main>
   </div>
 
+  <!-- Karar Verme Modalı -->
   <div id="decide-modal" class="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="decide-modal-title" hidden>
     <div class="modal-card">
       <h3 id="decide-modal-title" class="modal-title">Seçimi Onayla</h3>
       <p id="decide-modal-desc" class="modal-desc"></p>
-      <label for="decide-reason-input" class="field-label">Karar nedeni (isteğe bağlı)</label>
+      <label for="decide-reason-input" class="field-label">Neden bunu seçtim? / Sonuç notu (isteğe bağlı)</label>
       <textarea
         id="decide-reason-input"
         class="modal-textarea"
@@ -107,6 +131,48 @@
       <div class="modal-actions">
         <button id="decide-cancel-btn" type="button" class="btn btn-secondary">İptal</button>
         <button id="decide-confirm-btn" type="button" class="btn btn-success">Kararı Kaydet</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- İçe Aktar Modalı -->
+  <div id="import-modal" class="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="import-modal-title" hidden>
+    <div class="modal-card modal-card-lg">
+      <h3 id="import-modal-title" class="modal-title">Pano İçe Aktar</h3>
+      <p class="modal-desc">
+        LLM'den gelen yanıtı (içinde <code>```json</code> bloğu bulunan metni) veya doğrudan pano JSON metnini aşağıya yapıştırın.
+      </p>
+      <label for="import-text-input" class="field-label">Pano metni veya JSON</label>
+      <textarea
+        id="import-text-input"
+        class="modal-textarea modal-textarea-lg"
+        rows="10"
+        placeholder="LLM'den gelen panoyu buraya yapıştırın..."
+      ></textarea>
+      <div id="import-error-msg" class="error-banner" role="alert" hidden></div>
+      <div class="modal-actions">
+        <button id="import-cancel-btn" type="button" class="btn btn-secondary">İptal</button>
+        <button id="import-confirm-btn" type="button" class="btn btn-primary">İçe aktar</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Panoyu Kopyala Yedek (Fallback) Modalı -->
+  <div id="copy-fallback-modal" class="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="copy-fallback-title" hidden>
+    <div class="modal-card modal-card-lg">
+      <h3 id="copy-fallback-title" class="modal-title">Panoyu Kopyala</h3>
+      <p class="modal-desc">
+        Panoya otomatik erişilemedi. Aşağıdaki seçili metni <strong>Ctrl+C</strong> (veya Cmd+C) ile kopyalayabilirsiniz:
+      </p>
+      <label for="copy-fallback-textarea" class="sr-only">Kopyalanacak pano metni</label>
+      <textarea
+        id="copy-fallback-textarea"
+        class="modal-textarea modal-textarea-lg"
+        rows="10"
+        readonly
+      ></textarea>
+      <div class="modal-actions">
+        <button id="copy-fallback-close-btn" type="button" class="btn btn-primary">Kapat</button>
       </div>
     </div>
   </div>
