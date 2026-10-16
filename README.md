@@ -15,6 +15,12 @@ Her şey konteynerde çalışır; sisteminize paket kurmanız gerekmez. Tek gere
 
 Konteyner `--restart unless-stopped` ile çalışır; bilgisayar yeniden başlayınca otomatik döner.
 
+## Yapay zekâ ile tartışma (kopyala / içe aktar)
+
+- **Panoyu kopyala** (karar detayında): seçili kararı okunabilir metin + JSON olarak panoya kopyalar. Bunu bir LLM sohbetine yapıştırıp tartışabilirsiniz.
+- **İçe aktar** (kenar çubuğu): LLM'in verdiği yanıtı (içindeki ```json bloğu otomatik bulunur) yapıştırın; her seferinde **yeni** bir karar oluşur, mevcut karar ezilmez.
+- **Neden notu**: karar verildikten sonra da düzenlenebilir; yeniden açınca korunur.
+
 ## Veri
 
 Veritabanı (SQLite) konteyner içinde `/data/choices.db` dosyasındadır ve `makeurchoice-data` adlı volume'da kalıcıdır. Konteyneri silmek veya `rebuild` yapmak veriyi silmez.
@@ -39,7 +45,7 @@ Geri yükleme için `./run.sh stop` sonrası aynı komutta `cp` yönünü ters �
 ## Geliştirme / test
 
 ```sh
-python3 -m unittest discover tests
+python3 -m unittest discover tests   # tests/ içindeki API ve kopyala→içe aktar testleri
 ```
 
 Ortam değişkenleri: `PORT` (varsayılan 8767), `DB_PATH` (varsayılan `/data/choices.db`).
